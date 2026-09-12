@@ -30,6 +30,9 @@ export default function Login() {
     try {
       const user = await apiService.auth.login(username, password);
       localStorage.setItem("user", JSON.stringify(user));
+      if (user.token) {
+        localStorage.setItem("token", user.token);
+      }
       navigate("/");
     } catch (err: any) {
       setError(err.message || "Tên đăng nhập hoặc mật khẩu không đúng.");

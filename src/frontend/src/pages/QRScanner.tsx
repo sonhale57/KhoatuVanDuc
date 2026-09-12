@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import jsQR from "jsqr";
 import { apiService, type Registration, type Course, type Member, type Bed, type Area } from "@/services/api";
 
 // ─────────────────────────────────────────────
@@ -84,6 +85,7 @@ export default function QRScanner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animRef = useRef<number>(0);
+  const isScannedRef = useRef<boolean>(false); // ref để tránh stale closure
   const [cameraError, setCameraError] = useState<string>("");
 
   // ── Camera helpers ───────────────────────────
@@ -95,66 +97,31 @@ export default function QRScanner() {
 
   const startCamera = useCallback(async () => {
     setCameraError("");
+    isScannedRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
     } catch {
       setCameraError("Không thể truy cập camera. Vui lòng cấp quyền hoặc nhập mã thủ công.");
     }
   }, []);
 
-  const scanFrame = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-      animRef.current = requestAnimationFrame(scanFrame); return;
-    }
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    if ("BarcodeDetector" in window) {
-      try {
-        // @ts-ignore
-        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-        const codes: { rawValue: string }[] = await detector.detect(canvas);
-        if (codes.length > 0) { handleQRDetected(codes[0].rawValue); return; }
-      } catch { /* continue */ }
-    }
-    animRef.current = requestAnimationFrame(scanFrame);
-  }, []); // eslint-disable-line
-
-  const handleQRDetected = useCallback(async (rawValue: string) => {
-    if (scanState === "scanning") return;
-    setScanState("scanning");
-    stopCamera();
-    await processQRCode(rawValue);
-  }, [scanState, stopCamera]); // eslint-disable-line
-
-  // ── Parse & validate QR format ───────────────
-  const parseQR = (raw: string): { code: string; uniqueId: string } | null => {
-    const trimmed = raw.trim();
-    const dotIndex = trimmed.indexOf(".");
-    if (dotIndex <= 0 || dotIndex === trimmed.length - 1) return null;
-    const code = trimmed.slice(0, dotIndex);
-    const uniqueId = trimmed.slice(dotIndex + 1);
-    if (!code || !uniqueId || isNaN(Number(uniqueId))) return null;
-    return { code, uniqueId };
-  };
-
-  const processQRCode = async (raw: string) => {
+  // processQRCode được khai báo trước scanFrame để tránh hoisting issue
+  const processQRCode = useCallback(async (raw: string) => {
     setScanError("");
     setScanResult(null);
     try {
       const parsed = parseQR(raw);
       if (!parsed) {
         setScanState("error");
-        setScanError("Mã QR không đúng định dạng. Yêu cầu định dạng: MÃ.SỐ_ĐỊNH_DANH (VD: VD00536.536)");
+        setScanError("Mã QR không đúng định dạng. Yêu cầu: MÃ.SỐ_ĐỊNH_DANH (VD: VD00536.536). Đã đọc: " + raw);
         return;
       }
 
@@ -167,20 +134,68 @@ export default function QRScanner() {
 
       if (!member) {
         setScanState("error");
-        setScanError(`Không tìm thấy thông tin Phật tử với mã "${parsed.code}" và số định danh "${parsed.uniqueId}".`);
+        setScanError(`Không tìm thấy Phật tử với mã "${parsed.code}" và số định danh "${parsed.uniqueId}".`);
         return;
       }
 
       const allRegs = await apiService.registrations.getAll();
       const memberRegs = allRegs.filter(r => r.memberId === member.id);
-
       setScanResult({ member, registrations: memberRegs });
       setScanState("found");
     } catch (err: any) {
       setScanState("error");
       setScanError(err.message || "Lỗi khi xử lý mã QR.");
     }
+  }, []);
+
+  // scanFrame dùng isScannedRef thay vì scanState để tránh stale closure
+  const scanFrame = useCallback(() => {
+    if (isScannedRef.current) return;
+    if (!videoRef.current || !canvasRef.current) {
+      animRef.current = requestAnimationFrame(scanFrame);
+      return;
+    }
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+      animRef.current = requestAnimationFrame(scanFrame);
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { animRef.current = requestAnimationFrame(scanFrame); return; }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Dùng jsQR để decode — hoạt động trên mọi browser
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    });
+
+    if (code && code.data) {
+      isScannedRef.current = true; // đánh dấu đã quét, ngăn scan lại
+      stopCamera();
+      setScanState("scanning");
+      processQRCode(code.data);
+      return;
+    }
+
+    animRef.current = requestAnimationFrame(scanFrame);
+  }, [stopCamera, processQRCode]); // eslint-disable-line
+
+  // ── Parse & validate QR format ───────────────
+  const parseQR = (raw: string): { code: string; uniqueId: string } | null => {
+    const trimmed = raw.trim();
+    const dotIndex = trimmed.indexOf(".");
+    if (dotIndex <= 0 || dotIndex === trimmed.length - 1) return null;
+    const code = trimmed.slice(0, dotIndex);
+    const uniqueId = trimmed.slice(dotIndex + 1);
+    if (!code || !uniqueId || isNaN(Number(uniqueId))) return null;
+    return { code, uniqueId };
   };
+
 
   // ── Manual entry ─────────────────────────────
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -201,6 +216,7 @@ export default function QRScanner() {
     setShowRegModal(false);
     setRegError("");
     setRegSuccess("");
+    isScannedRef.current = false; // reset để cho phép quét lại
     startCamera().then(() => { animRef.current = requestAnimationFrame(scanFrame); });
   }, [startCamera, scanFrame]);
 
@@ -237,9 +253,6 @@ export default function QRScanner() {
       const defaultCourse = getDefaultCourse(crs);
       if (defaultCourse) {
         setRegCourseId(defaultCourse.id);
-        if (defaultCourse.fromdate) {
-          setRegFromdate(defaultCourse.fromdate.substring(0, 10));
-        }
         // Auto days from course duration
         if (defaultCourse.fromdate && defaultCourse.todate) {
           const diff = Math.abs(new Date(defaultCourse.todate).getTime() - new Date(defaultCourse.fromdate).getTime());
@@ -573,8 +586,8 @@ export default function QRScanner() {
 // ScanView Component
 // ─────────────────────────────────────────────
 interface ScanViewProps {
-  videoRef: React.RefObject<HTMLVideoElement>;
-  canvasRef: React.RefObject<HTMLCanvasElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
   scanState: ScanState;
   scanResult: ScanResult | null;
   scanError: string;

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -12,6 +13,7 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class AreasController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -25,6 +27,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<IEnumerable<AreaResponse>>> GetAreas()
         {
             var areas = await _context.Areas
+                .AsNoTracking()
                 .Select(a => new AreaResponse
                 {
                     Id = a.Id,
@@ -43,7 +46,10 @@ namespace Backend.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<AreaResponse>> GetArea(int id)
         {
-            var a = await _context.Areas.FindAsync(id);
+            var a = await _context.Areas
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+
             if (a == null) return NotFound(new { message = "Không tìm thấy khu vực." });
 
             return Ok(new AreaResponse

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -12,6 +13,7 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class MembersController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -25,6 +27,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<IEnumerable<MemberResponse>>> GetMembers()
         {
             var membersList = await _context.Members
+                .AsNoTracking()
                 .Include(m => m.Registrations)
                     .ThenInclude(r => r.Course)
                 .ToListAsync();
@@ -58,10 +61,68 @@ namespace Backend.Controllers
             return Ok(members);
         }
 
+        [HttpGet("paged")]
+        public async Task<ActionResult<PagedResponse<MemberResponse>>> GetPagedMembers([FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 20, [FromQuery] string? keyword = null)
+        {
+            var query = _context.Members
+                .AsNoTracking()
+                .Include(m => m.Registrations)
+                    .ThenInclude(r => r.Course)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                query = query.Where(m => (m.Name != null && m.Name.Contains(keyword)) || (m.Code != null && m.Code.Contains(keyword)) || (m.Phone != null && m.Phone.Contains(keyword)));
+            }
+
+            var totalCount = await query.CountAsync();
+
+            var membersList = await query
+                .OrderByDescending(m => m.Id)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var items = membersList.Select(m => new MemberResponse
+            {
+                Id = m.Id,
+                UniqueId = m.UniqueId,
+                Code = m.Code,
+                Name = m.Name ?? string.Empty,
+                OtherName = m.OtherName,
+                YearOfBirth = m.YearOfBirth,
+                Gender = m.Gender,
+                Phone = m.Phone,
+                RelativePhone = m.RelativePhone,
+                IdentityImage = m.IdentityImage,
+                JoinedCoursesCount = m.Registrations.Count,
+                CourseHistory = m.Registrations.Select(r => new MemberCourseHistoryDto
+                {
+                    CourseId = r.CourseId,
+                    CourseName = r.Course?.Name ?? string.Empty,
+                    Fromdate = r.Fromdate,
+                    Todate = r.Todate,
+                    DayAttend = r.DayAttend,
+                    ActualDays = r.Todate.HasValue && r.Fromdate.HasValue ? (int?)((r.Todate.Value - r.Fromdate.Value).Days + 1) : null
+                }).ToList(),
+                CreatedAt = m.CreatedAt,
+                CreatedBy = m.CreatedBy
+            }).ToList();
+
+            return Ok(new PagedResponse<MemberResponse>
+            {
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize,
+                Items = items
+            });
+        }
+
         [HttpGet("{id}")]
         public async Task<ActionResult<MemberResponse>> GetMember(int id)
         {
             var m = await _context.Members
+                .AsNoTracking()
                 .Include(x => x.Registrations)
                     .ThenInclude(r => r.Course)
                 .FirstOrDefaultAsync(x => x.Id == id);
@@ -103,6 +164,7 @@ namespace Backend.Controllers
 
             // Generate unique STT based Code (lowest available VD + 5 digits)
             var existingCodes = await _context.Members
+                .AsNoTracking()
                 .Where(m => m.Code != null && m.Code.StartsWith("VD"))
                 .Select(m => m.Code)
                 .ToListAsync();

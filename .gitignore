@@ -1,0 +1,23 @@
+# Build outputs
+bin/
+obj/
+dist/
+dist-ssr/
+deploy/backend/
+deploy/frontend/
+
+# Node dependencies
+node_modules/
+
+# Environment and Archives
+.env*.local
+*.rar
+*.zip
+
+# Tooling and IDE
+.codegraph/
+.vscode/
+.idea/
+.DS_Store
+*.user
+*.suo

@@ -1,29 +1,53 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || "http://apiqlkt.chuavanduc.vn/api";
 
-function getCurrentUserId(): number {
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   try {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.id) return parsed.id;
+    const token = localStorage.getItem("token");
+    const rawUser = localStorage.getItem("user");
+    let userId = 1;
+    let jwtToken = token;
+
+    if (rawUser) {
+      const parsed = JSON.parse(rawUser);
+      if (parsed?.id) userId = parsed.id;
+      if (parsed?.token && !jwtToken) jwtToken = parsed.token;
     }
+
+    if (jwtToken) {
+      headers["Authorization"] = `Bearer ${jwtToken}`;
+    }
+    headers["X-User-Id"] = String(userId);
   } catch {
     // ignore
   }
-  return 1; // fallback default
+  return headers;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
-  const userId = getCurrentUserId();
   const response = await fetch(url, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
-      "X-User-Id": String(userId),
+      ...getAuthHeaders(),
       ...(options?.headers || {}),
     },
   });
+
+  if (response.status === 401) {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login?expired=true";
+    }
+    throw new Error("Phiên làm việc đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
+  }
+
+  if (response.status === 403) {
+    throw new Error("Bạn không có quyền truy cập hoặc thực hiện thao tác này (403 Forbidden).");
+  }
 
   if (!response.ok) {
     let errorMessage = "Đã xảy ra lỗi hệ thống.";
@@ -49,6 +73,14 @@ export interface User {
   displayName: string;
   role: string;
   active: boolean;
+  token?: string;
+}
+
+export interface PagedResponse<T> {
+  totalCount: number;
+  pageIndex: number;
+  pageSize: number;
+  items: T[];
 }
 
 export interface Course {
@@ -142,15 +174,19 @@ export interface Event {
   createdBy?: number;
 }
 
-
 export const apiService = {
   // Auth
   auth: {
-    login: (username: string, password: string) =>
-      request<User>("/auth/login", {
+    login: async (username: string, password: string) => {
+      const res = await request<User>("/auth/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
-      }),
+      });
+      if (res?.token) {
+        localStorage.setItem("token", res.token);
+      }
+      return res;
+    },
     seed: () =>
       request<{ message: string }>("/auth/seed", {
         method: "POST",
@@ -220,6 +256,8 @@ export const apiService = {
   // Members
   members: {
     getAll: () => request<Member[]>("/members"),
+    getPaged: (pageIndex: number = 1, pageSize: number = 20, keyword?: string) =>
+      request<PagedResponse<Member>>(`/members/paged?pageIndex=${pageIndex}&pageSize=${pageSize}${keyword ? `&keyword=${encodeURIComponent(keyword)}` : ""}`),
     getById: (id: number) => request<Member>(`/members/${id}`),
     create: (data: Omit<Member, "id" | "joinedCoursesCount">) =>
       request<Member>("/members", {

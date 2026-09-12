@@ -1,0 +1,24 @@
+{
+  "short_name": "Khóa Tu Vạn Đức",
+  "name": "Quản lý Khóa Tu Chùa Vạn Đức",
+  "description": "Hệ thống Quản lý Đăng ký Khóa Tu Chùa Vạn Đức",
+  "icons": [
+    {
+      "src": "/images/logo_cvd.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/logo_cvd.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait"
+}

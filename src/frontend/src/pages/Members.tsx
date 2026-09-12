@@ -291,8 +291,8 @@ export default function Members() {
                 }
               }
               .qr-code {
-                width: 4.8cm;
-                height: 4.8cm;
+                width: 2cm;
+                height: 2cm;
                 object-fit: contain;
               }
               .footer-code {
@@ -521,63 +521,63 @@ export default function Members() {
                 </TableRow>
               ) : (
                 filteredAndSortedMembers.map((member) => (
-                    <TableRow key={member.id} className="hover:bg-accent/5">
-                      <TableCell className="font-semibold text-muted-foreground">{member.code || `VD-${member.id}`}</TableCell>
-                      <TableCell className="font-semibold text-foreground">{member.name}</TableCell>
-                      <TableCell className="text-primary font-medium">{member.otherName || "Chưa có"}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-semibold ${member.gender === "Nam"
-                          ? "bg-sky-500/10 text-sky-600 border border-sky-500/20"
-                          : "bg-pink-500/10 text-pink-600 border border-pink-500/20"
-                          }`}>
-                          {member.gender}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-medium">{member.yearOfBirth}</TableCell>
-                      <TableCell className="font-medium text-muted-foreground">{member.phone || "N/A"}</TableCell>
-                      <TableCell className="text-center">
-                        <span className={`inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full font-bold shadow-sm ${member.joinedCoursesCount > 0
-                          ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                          : "bg-muted text-muted-foreground"
-                          }`}>
-                          <HeartHandshake className="h-3.5 w-3.5" />
-                          {member.joinedCoursesCount} khóa tu
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handlePrintCard(member)}
-                            className="h-8 w-8 text-emerald-600 hover:bg-emerald-500/10 rounded-lg"
-                            title="In thẻ"
-                          >
-                            <Printer className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenEdit(member)}
-                            className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg"
-                            title="Sửa thông tin"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(member.id)}
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg"
-                            title="Xóa thành viên"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                  <TableRow key={member.id} className="hover:bg-accent/5">
+                    <TableCell className="font-semibold text-muted-foreground">{member.code || `VD-${member.id}`}</TableCell>
+                    <TableCell className="font-semibold text-foreground">{member.name}</TableCell>
+                    <TableCell className="text-primary font-medium">{member.otherName || "Chưa có"}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-semibold ${member.gender === "Nam"
+                        ? "bg-sky-500/10 text-sky-600 border border-sky-500/20"
+                        : "bg-pink-500/10 text-pink-600 border border-pink-500/20"
+                        }`}>
+                        {member.gender}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-medium">{member.yearOfBirth}</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">{member.phone || "N/A"}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={`inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full font-bold shadow-sm ${member.joinedCoursesCount > 0
+                        ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                        : "bg-muted text-muted-foreground"
+                        }`}>
+                        <HeartHandshake className="h-3.5 w-3.5" />
+                        {member.joinedCoursesCount} khóa tu
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handlePrintCard(member)}
+                          className="h-8 w-8 text-emerald-600 hover:bg-emerald-500/10 rounded-lg"
+                          title="In thẻ"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenEdit(member)}
+                          className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg"
+                          title="Sửa thông tin"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(member.id)}
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg"
+                          title="Xóa thành viên"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         )}

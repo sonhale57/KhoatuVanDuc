@@ -9,7 +9,7 @@ import Members from "@/pages/Members";
 import Beds from "@/pages/Beds";
 import Registrations from "@/pages/Registrations";
 import Events from "@/pages/Events";
-import QRScanner from "@/pages/QRScanner";
+import MobileApp from "@/pages/MobileApp";
 
 // Protected Route wrapper component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -30,8 +30,9 @@ function App() {
         {/* Public Route */}
         <Route path="/login" element={<Login />} />
 
-        {/* QR Scanner - standalone mobile/tablet page (public) */}
-        <Route path="/qr" element={<QRScanner />} />
+        {/* Mobile PWA App routes (public / protected) */}
+        <Route path="/mobile" element={<MobileApp />} />
+        <Route path="/qr" element={<MobileApp />} />
 
         {/* Protected Routes wrapped in DashboardLayout */}
         <Route

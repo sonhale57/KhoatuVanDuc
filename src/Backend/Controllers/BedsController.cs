@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -12,6 +13,7 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class BedsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -24,22 +26,31 @@ namespace Backend.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<BedResponse>>> GetBeds([FromQuery] int? courseId)
         {
-            var beds = await _context.Beds.Include(b => b.Area).ToListAsync();
+            var beds = await _context.Beds
+                .AsNoTracking()
+                .Include(b => b.Area)
+                .ToListAsync();
 
             List<Registration> registrations = new List<Registration>();
             if (courseId.HasValue)
             {
                 registrations = await _context.Registrations
+                    .AsNoTracking()
                     .Include(r => r.Member)
                     .Where(r => r.CourseId == courseId.Value)
                     .ToListAsync();
             }
             else
             {
-                var latestCourse = await _context.Courses.OrderByDescending(c => c.Fromdate).FirstOrDefaultAsync();
+                var latestCourse = await _context.Courses
+                    .AsNoTracking()
+                    .OrderByDescending(c => c.Fromdate)
+                    .FirstOrDefaultAsync();
+
                 if (latestCourse != null)
                 {
                     registrations = await _context.Registrations
+                        .AsNoTracking()
                         .Include(r => r.Member)
                         .Where(r => r.CourseId == latestCourse.Id)
                         .ToListAsync();
@@ -72,7 +83,11 @@ namespace Backend.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<BedResponse>> GetBed(int id)
         {
-            var b = await _context.Beds.Include(x => x.Area).FirstOrDefaultAsync(x => x.Id == id);
+            var b = await _context.Beds
+                .AsNoTracking()
+                .Include(x => x.Area)
+                .FirstOrDefaultAsync(x => x.Id == id);
+
             if (b == null) return NotFound(new { message = "Không tìm thấy chỗ ngủ." });
 
             return Ok(new BedResponse
@@ -113,7 +128,7 @@ namespace Backend.Controllers
             await _context.SaveChangesAsync();
 
             // Load Area details for response
-            var area = await _context.Areas.FindAsync(b.AreaId);
+            var area = await _context.Areas.AsNoTracking().FirstOrDefaultAsync(a => a.Id == b.AreaId);
 
             return CreatedAtAction(nameof(GetBed), new { id = b.Id }, new BedResponse
             {

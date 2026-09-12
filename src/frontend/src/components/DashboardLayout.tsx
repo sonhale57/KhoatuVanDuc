@@ -12,8 +12,7 @@ import {
   ChevronRight,
   User as UserIcon,
   BookUser,
-  CalendarDays,
-  MonitorSmartphone
+  CalendarDays
 } from "lucide-react";
 import {
   Sidebar,
@@ -70,7 +69,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { title: "Đăng ký Tham gia", path: "/registrations", icon: ClipboardList },
     { title: "Quản lý Sự kiện", path: "/events", icon: CalendarDays },
     { title: "Quản trị Users", path: "/users", icon: Users, adminOnly: true },
-    { title: "Mobile Version", path: "/qr", icon: MonitorSmartphone },
   ];
 
   // Map route path to human-readable Vietnamese breadcrumb label

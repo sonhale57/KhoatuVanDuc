@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { apiService, type Registration, type Course, type Member, type Bed, type Area, type User } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,14 +12,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, Edit, Plus, ClipboardList, BedDouble, LayoutGrid, List, UserPlus, UserCheck, RefreshCw, CalendarCheck, History } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
-const formatDescription = (desc: string | undefined | null) => {
+const formatDescription = (desc?: string) => {
   if (!desc) return "";
   return desc
     .split(/[-\n]/)
     .map(part => part.trim())
     .filter(Boolean)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join("\n");
+};
+
+const getTodayLocalDateString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export default function Registrations() {
@@ -35,7 +43,7 @@ export default function Registrations() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  
+
   // History dialog states
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyReg, setHistoryReg] = useState<Registration | null>(null);
@@ -77,7 +85,7 @@ export default function Registrations() {
   const [actualTodate, setActualTodate] = useState("");
 
   // Sort states
-  const [sortField, setSortField] = useState<"status" | "memberCode" | "fromdate" | null>("fromdate");
+  const [sortField, setSortField] = useState<"status" | "memberCode" | "createdAt" | "fromdate" | null>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const isCourseActive = (course: Course) => {
@@ -156,13 +164,13 @@ export default function Registrations() {
     loadData();
   }, [selectedCourseFilter, viewMode, matrixCourseId]);
 
-  // Update dates and day attend when course selection changes
+  // Update dates, day attend, and bed selection when course selection changes
   useEffect(() => {
     if (courseId !== "") {
       const selected = courses.find(c => c.id === courseId);
       if (selected) {
-        if (selected.fromdate) {
-          setFromdate(selected.fromdate.substring(0, 10));
+        if (!isEditing) {
+          setFromdate(getTodayLocalDateString());
         }
         if (selected.fromdate && selected.todate) {
           const diffTime = Math.abs(new Date(selected.todate).getTime() - new Date(selected.fromdate).getTime());
@@ -170,24 +178,40 @@ export default function Registrations() {
           setDayAttend(diffDays);
         }
       }
+      // Re-select available bed for the selected course
+      const selectable = getSelectableBeds(courseId);
+      if (selectable.length > 0 && (!bedId || !selectable.some(b => b.id === bedId))) {
+        setBedId(selectable[0].id);
+      }
     }
-  }, [courseId, courses]);
+  }, [courseId, courses, isEditing]);
 
-  const handleOpenAdd = () => {
+  const handleOpenAdd = async () => {
     setIsEditing(false);
     setEditMemberId(null);
     setEditCourseId(null);
+
+    // Refresh data so beds & registrations are up to date
+    await loadData();
 
     const activeCoursesList = courses.filter(isCourseActive);
     const initialCourseId = activeCoursesList.length > 0 ? activeCoursesList[0].id : "";
 
     setCourseId(initialCourseId);
     setMemberId("");
-    setFromdate("");
-    setTodate("");
-    setDayAttend(3);
+    setFromdate(getTodayLocalDateString());
 
-    // Select first vacant bed if available
+    const selectedCourse = courses.find(c => c.id === initialCourseId);
+    if (selectedCourse && selectedCourse.fromdate && selectedCourse.todate) {
+      const diffTime = Math.abs(new Date(selectedCourse.todate).getTime() - new Date(selectedCourse.fromdate).getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      setDayAttend(diffDays);
+    } else {
+      setDayAttend(3);
+    }
+    setTodate("");
+
+    // Select first vacant bed if available from fresh beds data
     const selectable = getSelectableBeds(initialCourseId);
     setBedId(selectable.length > 0 ? selectable[0].id : "");
 
@@ -356,7 +380,7 @@ export default function Registrations() {
     setCheckoutOpen(true);
   };
 
-   const handleCheckoutSubmit = async (e: React.FormEvent) => {
+  const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!checkoutReg || !actualTodate) return;
     if (submitting) return;
@@ -411,6 +435,9 @@ export default function Registrations() {
       } else if (sortField === "status") {
         valA = a.todate ? "completed" : "active";
         valB = b.todate ? "completed" : "active";
+      } else if (sortField === "createdAt") {
+        valA = a.createdAt ? new Date(a.createdAt).getTime() : (a.fromdate ? new Date(a.fromdate).getTime() : 0);
+        valB = b.createdAt ? new Date(b.createdAt).getTime() : (b.fromdate ? new Date(b.fromdate).getTime() : 0);
       } else if (sortField === "fromdate") {
         valA = a.fromdate ? new Date(a.fromdate).getTime() : 0;
         valB = b.fromdate ? new Date(b.fromdate).getTime() : 0;
@@ -432,10 +459,7 @@ export default function Registrations() {
     setMemberId(reg.memberId);
 
     // Set new fromdate to today (local time)
-    const now = new Date();
-    const offset = now.getTimezoneOffset();
-    const localDate = new Date(now.getTime() - (offset * 60 * 1000));
-    setFromdate(localDate.toISOString().substring(0, 10));
+    setFromdate(getTodayLocalDateString());
 
     setTodate("");
     setDayAttend(3);
@@ -473,15 +497,17 @@ export default function Registrations() {
       setMemberId("");
       setBedId(bed.id);
 
+      setFromdate(getTodayLocalDateString());
+      setTodate("");
+
       const selectedCourse = courses.find(c => c.id === targetCourseId);
-      if (selectedCourse) {
-        if (selectedCourse.fromdate) setFromdate(selectedCourse.fromdate.substring(0, 10));
-        if (selectedCourse.todate) setTodate(selectedCourse.todate.substring(0, 10));
+      if (selectedCourse && selectedCourse.fromdate && selectedCourse.todate) {
+        const diffTime = Math.abs(new Date(selectedCourse.todate).getTime() - new Date(selectedCourse.fromdate).getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        setDayAttend(diffDays);
       } else {
-        setFromdate("");
-        setTodate("");
+        setDayAttend(3);
       }
-      setDayAttend(3);
       setDescription("");
       setRecievePhone(false);
       setRecieveIdentity(false);
@@ -514,6 +540,16 @@ export default function Registrations() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <Link to="/mobile">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1.5 font-semibold text-xs h-8 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20"
+            >
+              📱 Giao diện Mobile
+            </Button>
+          </Link>
+
           {/* View Mode Toggle */}
           <div className="flex items-center gap-1 border rounded-lg p-1 bg-muted/20">
             <Button
@@ -587,12 +623,6 @@ export default function Registrations() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex items-end h-full">
-              <Button variant="outline" size="icon" onClick={loadData} className="h-9 w-9 mt-5" title="Tải lại sơ đồ">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
         </Card>
       )}
@@ -625,10 +655,10 @@ export default function Registrations() {
               </Select>
             </div>
 
-            <div className="w-[220px]">
+            <div className="w-[240px]">
               <Label className="text-xs font-bold text-muted-foreground uppercase mb-1.5 block">Sắp xếp</Label>
               <Select
-                value={`${sortField || "fromdate"}-${sortOrder || "desc"}`}
+                value={`${sortField || "createdAt"}-${sortOrder || "desc"}`}
                 onValueChange={(val) => {
                   const [field, order] = val.split("-");
                   setSortField(field as any);
@@ -639,20 +669,14 @@ export default function Registrations() {
                   <SelectValue placeholder="Sắp xếp theo..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="fromdate-desc">Đăng ký mới nhất</SelectItem>
-                  <SelectItem value="fromdate-asc">Đăng ký cũ nhất</SelectItem>
+                  <SelectItem value="createdAt-desc">Thời gian đăng ký mới nhất</SelectItem>
+                  <SelectItem value="createdAt-asc">Thời gian đăng ký cũ nhất</SelectItem>
                   <SelectItem value="memberCode-asc">Mã Phật tử (A - Z)</SelectItem>
                   <SelectItem value="memberCode-desc">Mã Phật tử (Z - A)</SelectItem>
                   <SelectItem value="status-asc">Trạng thái (Chưa về trước)</SelectItem>
                   <SelectItem value="status-desc">Trạng thái (Đã về trước)</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="flex items-end h-full">
-              <Button variant="outline" size="icon" onClick={loadData} className="h-9 w-9 mt-5" title="Tải lại danh sách">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
             </div>
           </div>
         </Card>
@@ -688,10 +712,12 @@ export default function Registrations() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {registrations.length === 0 ? (
+                    {getSortedRegistrations().length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                          Chưa có Phật tử nào đăng ký khóa tu này. Click nút Đăng ký để sắp xếp.
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8 font-medium">
+                          {registrations.length === 0
+                            ? "Chưa có Phật tử nào đăng ký khóa tu này. Click nút Đăng ký để sắp xếp."
+                            : "Không tìm thấy dữ liệu đăng ký phù hợp với từ khóa."}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -814,95 +840,97 @@ export default function Registrations() {
           ) : (
             <div>
               {/* Room Grid Matrix */}
-              <div
-                className="grid gap-1.5"
-                style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
-              >
-                {Array.from({ length: gridRows }).flatMap((_, r) =>
-                  Array.from({ length: gridCols }).map((_, c) => {
-                    const bed = activeAreaBeds.find(b => b.rowNumber === r && b.orderNumber === c);
-                    const targetCourseId = matrixCourseId || (activeCourses.length > 0 ? activeCourses[0]?.id : "");
-                    const reg = bed ? registrations.find(rg => rg.bedId === bed.id && rg.courseId === targetCourseId && !rg.todate) : null;
+              <div className="overflow-x-auto pb-2">
+                <div
+                  className="grid gap-1.5 min-w-[600px]"
+                  style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+                >
+                  {Array.from({ length: gridRows }).flatMap((_, r) =>
+                    Array.from({ length: gridCols }).map((_, c) => {
+                      const bed = activeAreaBeds.find(b => b.rowNumber === r && b.orderNumber === c);
+                      const targetCourseId = matrixCourseId || (activeCourses.length > 0 ? activeCourses[0]?.id : "");
+                      const reg = bed ? registrations.find(rg => rg.bedId === bed.id && rg.courseId === targetCourseId && !rg.todate) : null;
 
-                    let cellClass = "bg-muted/5 border-dashed border-slate-200/20 dark:border-slate-800/60 opacity-40 cursor-not-allowed";
-                    if (bed) {
-                      if (bed.type !== "Chỗ ngủ") {
-                        cellClass = "bg-slate-700 dark:bg-slate-800 border-solid border-slate-900 shadow-sm text-slate-100";
-                      } else if (!bed.active) {
-                        cellClass = "bg-slate-100 dark:bg-slate-900/40 border-dashed border-slate-300 opacity-60 text-muted-foreground shadow-sm cursor-not-allowed";
-                      } else if (bed.isOccupied) {
-                        cellClass = "bg-indigo-500/10 dark:bg-indigo-950/30 border-solid border-indigo-500/30 shadow-sm cursor-pointer hover:bg-indigo-500/20 transition-all";
-                      } else {
-                        cellClass = "bg-card border-solid border-primary/20 shadow-sm cursor-pointer hover:border-primary/55 hover:scale-[1.02] transition-all";
+                      let cellClass = "bg-muted/5 border-dashed border-slate-200/20 dark:border-slate-800/60 opacity-40 cursor-not-allowed";
+                      if (bed) {
+                        if (bed.type !== "Chỗ ngủ") {
+                          cellClass = "bg-slate-700 dark:bg-slate-800 border-solid border-slate-900 shadow-sm text-slate-100";
+                        } else if (!bed.active) {
+                          cellClass = "bg-slate-100 dark:bg-slate-900/40 border-dashed border-slate-300 opacity-60 text-muted-foreground shadow-sm cursor-not-allowed";
+                        } else if (bed.isOccupied) {
+                          cellClass = "bg-indigo-500/10 dark:bg-indigo-950/30 border-solid border-indigo-500/30 shadow-sm cursor-pointer hover:bg-indigo-500/20 transition-all";
+                        } else {
+                          cellClass = "bg-card border-solid border-primary/20 shadow-sm cursor-pointer hover:border-primary/55 hover:scale-[1.02] transition-all";
+                        }
                       }
-                    }
 
-                    return (
-                      <div
-                        key={`${r}-${c}`}
-                        className={`relative min-h-[105px] border rounded-xl flex flex-col items-center justify-center p-3 select-none ${cellClass}`}
-                        onClick={() => bed && handleCellClick(bed)}
-                        title={bed ? (bed.type !== "Chỗ ngủ" ? bed.type : `Giường: ${bed.code}`) : `Trống`}
-                      >
-                        {bed ? (
-                          bed.type !== "Chỗ ngủ" ? (
-                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">
-                              {bed.type}
-                            </div>
-                          ) : (
-                            <div className="w-full h-full flex flex-col justify-between">
-                              <div className="flex items-start justify-between">
-                                <div className={`flex h-7 w-7 items-center justify-center rounded ${bed.isOccupied ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400" : !bed.active ? "bg-slate-200 text-slate-500" : "bg-primary/10 text-primary"}`}>
-                                  <BedDouble className="h-4.5 w-4.5" />
-                                </div>
-                                {bed.isOccupied && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (reg) {
-                                        handleOpenCheckout(reg);
-                                      }
-                                    }}
-                                    className="h-6 w-6 text-emerald-600 hover:bg-emerald-500/10 rounded"
-                                    title="Cập nhật ngày về"
-                                  >
-                                    <CalendarCheck className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
+                      return (
+                        <div
+                          key={`${r}-${c}`}
+                          className={`relative min-h-[105px] border rounded-xl flex flex-col items-center justify-center p-3 select-none ${cellClass}`}
+                          onClick={() => bed && handleCellClick(bed)}
+                          title={bed ? (bed.type !== "Chỗ ngủ" ? bed.type : `Giường: ${bed.code}`) : `Trống`}
+                        >
+                          {bed ? (
+                            bed.type !== "Chỗ ngủ" ? (
+                              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">
+                                {bed.type}
                               </div>
-
-                              <div className="mt-2">
-                                <span className="text-xs font-bold text-foreground block">{bed.code}</span>
-                                {bed.isOccupied ? (
-                                  <div className="mt-1">
-                                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block truncate" title={bed.currentMemberName}>
-                                      {bed.currentMemberName}
-                                    </span>
-                                    {reg?.memberOtherName && (
-                                      <span className="text-[9px] text-primary font-semibold block truncate" title={reg.memberOtherName}>
-                                        PD: {reg.memberOtherName}
-                                      </span>
-                                    )}
+                            ) : (
+                              <div className="w-full h-full flex flex-col justify-between">
+                                <div className="flex items-start justify-between">
+                                  <div className={`flex h-7 w-7 items-center justify-center rounded ${bed.isOccupied ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400" : !bed.active ? "bg-slate-200 text-slate-500" : "bg-primary/10 text-primary"}`}>
+                                    <BedDouble className="h-4.5 w-4.5" />
                                   </div>
-                                ) : bed.description ? (
-                                  <span className="text-[9px] leading-tight text-muted-foreground/80 font-semibold block mt-1 whitespace-pre-line" title={formatDescription(bed.description)}>
-                                    {formatDescription(bed.description)}
-                                  </span>
-                                ) : null}
+                                  {bed.isOccupied && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (reg) {
+                                          handleOpenCheckout(reg);
+                                        }
+                                      }}
+                                      className="h-6 w-6 text-emerald-600 hover:bg-emerald-500/10 rounded"
+                                      title="Cập nhật ngày về"
+                                    >
+                                      <CalendarCheck className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+
+                                <div className="mt-2">
+                                  <span className="text-xs font-bold text-foreground block">{bed.code}</span>
+                                  {bed.isOccupied ? (
+                                    <div className="mt-1">
+                                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block truncate" title={bed.currentMemberName}>
+                                        {bed.currentMemberName}
+                                      </span>
+                                      {reg?.memberOtherName && (
+                                        <span className="text-[9px] text-primary font-semibold block truncate" title={reg.memberOtherName}>
+                                          PD: {reg.memberOtherName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : bed.description ? (
+                                    <span className="text-[9px] leading-tight text-muted-foreground/80 font-semibold block mt-1 whitespace-pre-line" title={formatDescription(bed.description)}>
+                                      {formatDescription(bed.description)}
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
-                            </div>
-                          )
-                        ) : (
-                          <span className="text-[9px] text-muted-foreground/30 font-semibold">
-                            Trống
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+                            )
+                          ) : (
+                            <span className="text-[9px] text-muted-foreground/30 font-semibold">
+                              Trống
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
               {/* Legend */}
@@ -918,7 +946,7 @@ export default function Registrations() {
 
       {/* Registration Add/Edit Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-[800px] h-[95vh] max-h-[95vh] flex flex-col p-6">
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col p-6">
           <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
             <DialogHeader className="flex-shrink-0">
               <DialogTitle className="text-lg font-bold">
@@ -1288,7 +1316,7 @@ export default function Registrations() {
               <History className="h-5 w-5 text-primary" /> Chi tiết lịch sử thao tác
             </DialogTitle>
             <DialogDescription>
-              Xem thông tin người thực hiện thao tác đăng ký và thao tác cho về.
+              Xem thông tin người thực hiện thao tác đăng ký và thao tác cập nhật.
             </DialogDescription>
           </DialogHeader>
 
@@ -1324,7 +1352,7 @@ export default function Registrations() {
                 </div>
 
                 <div className="border rounded-lg p-3 bg-card">
-                  <div className="font-bold text-xs text-emerald-600 uppercase tracking-wider mb-2">Thao tác cho về / Cập nhật</div>
+                  <div className="font-bold text-xs text-emerald-600 uppercase tracking-wider mb-2">Thao tác Cập nhật</div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-muted-foreground block">Người thực hiện:</span>

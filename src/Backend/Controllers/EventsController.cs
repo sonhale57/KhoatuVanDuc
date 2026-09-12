@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -12,6 +13,7 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class EventsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -25,6 +27,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<IEnumerable<EventResponse>>> GetEvents()
         {
             var events = await _context.Events
+                .AsNoTracking()
                 .Select(e => new EventResponse
                 {
                     Id = e.Id,
@@ -43,7 +46,10 @@ namespace Backend.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<EventResponse>> GetEvent(int id)
         {
-            var ev = await _context.Events.FindAsync(id);
+            var ev = await _context.Events
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == id);
+
             if (ev == null) return NotFound(new { message = "Không tìm thấy sự kiện." });
 
             return Ok(new EventResponse

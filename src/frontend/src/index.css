@@ -75,13 +75,8 @@
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
+  body, h1, h2, h3, h4, h5, h6 {
     font-family: 'Nunito Sans', sans-serif;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Quicksand', sans-serif;
-    font-weight: 700;
   }
 }
 

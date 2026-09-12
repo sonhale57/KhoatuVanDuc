@@ -30,5 +30,14 @@ namespace Backend.DTOs
         public string DisplayName { get; set; } = string.Empty;
         public string Role { get; set; } = "Admin"; // Kept for frontend compatibility
         public bool Active { get; set; }
+        public string Token { get; set; } = string.Empty;
+    }
+
+    public class PagedResponse<T>
+    {
+        public int TotalCount { get; set; }
+        public int PageIndex { get; set; }
+        public int PageSize { get; set; }
+        public IEnumerable<T> Items { get; set; } = new List<T>();
     }
 }

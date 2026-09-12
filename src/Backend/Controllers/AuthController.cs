@@ -13,20 +13,27 @@ namespace Backend.Controllers
     public class AuthController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        public AuthController(AppDbContext context)
+        public AuthController(AppDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Username == request.Username);
+
             if (user == null || string.IsNullOrEmpty(user.Password) || !HashHelper.VerifyPassword(request.Password, user.Password))
             {
                 return Unauthorized(new { message = "Tên đăng nhập hoặc mật khẩu không chính xác." });
             }
+
+            var token = JwtHelper.GenerateToken(user, _configuration);
 
             return Ok(new UserResponse
             {
@@ -34,7 +41,8 @@ namespace Backend.Controllers
                 Username = user.Username ?? string.Empty,
                 DisplayName = user.DisplayName ?? string.Empty,
                 Role = "Admin",
-                Active = user.Active ?? false
+                Active = user.Active ?? false,
+                Token = token
             });
         }
 

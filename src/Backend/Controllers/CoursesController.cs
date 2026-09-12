@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -12,6 +13,7 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class CoursesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -25,6 +27,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<IEnumerable<CourseResponse>>> GetCourses()
         {
             var courses = await _context.Courses
+                .AsNoTracking()
                 .Include(c => c.Registrations)
                 .Select(c => new CourseResponse
                 {
@@ -45,6 +48,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<CourseResponse>> GetCourse(int id)
         {
             var course = await _context.Courses
+                .AsNoTracking()
                 .Include(c => c.Registrations)
                 .FirstOrDefaultAsync(c => c.Id == id);
 

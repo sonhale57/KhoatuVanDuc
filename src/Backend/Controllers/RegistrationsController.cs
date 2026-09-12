@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -6,12 +7,14 @@ using Backend.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class RegistrationsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -23,11 +26,16 @@ namespace Backend.Controllers
 
         private int GetCurrentUserId()
         {
-            if (Request.Headers.TryGetValue("X-User-Id", out var value) &&
-                int.TryParse(value.FirstOrDefault(), out int userId) &&
-                userId > 0)
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (claim != null && int.TryParse(claim.Value, out int userId))
             {
                 return userId;
+            }
+            if (Request.Headers.TryGetValue("X-User-Id", out var value) &&
+                int.TryParse(value.FirstOrDefault(), out int fallbackId) &&
+                fallbackId > 0)
+            {
+                return fallbackId;
             }
             return 1; // fallback: admin
         }
@@ -36,6 +44,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<IEnumerable<RegistrationResponse>>> GetRegistrations([FromQuery] int? courseId)
         {
             IQueryable<Registration> query = _context.Registrations
+                .AsNoTracking()
                 .Include(r => r.Course)
                 .Include(r => r.Member)
                 .Include(r => r.Bed)
@@ -79,6 +88,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<RegistrationResponse>> GetRegistration(int memberId, int courseId)
         {
             var r = await _context.Registrations
+                .AsNoTracking()
                 .Include(reg => reg.Course)
                 .Include(reg => reg.Member)
                 .Include(reg => reg.Bed)
@@ -165,6 +175,7 @@ namespace Backend.Controllers
                 }
 
                 var reReg = await _context.Registrations
+                    .AsNoTracking()
                     .Include(reg => reg.Course)
                     .Include(reg => reg.Member)
                     .Include(reg => reg.Bed)
@@ -229,6 +240,7 @@ namespace Backend.Controllers
             }
 
             var created = await _context.Registrations
+                .AsNoTracking()
                 .Include(reg => reg.Course)
                 .Include(reg => reg.Member)
                 .Include(reg => reg.Bed)

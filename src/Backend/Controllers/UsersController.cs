@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
@@ -12,6 +13,7 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class UsersController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -25,6 +27,7 @@ namespace Backend.Controllers
         public async Task<ActionResult<IEnumerable<UserResponse>>> GetUsers()
         {
             var users = await _context.Users
+                .AsNoTracking()
                 .Select(u => new UserResponse
                 {
                     Id = u.Id,
@@ -41,7 +44,10 @@ namespace Backend.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<UserResponse>> GetUser(int id)
         {
-            var user = await _context.Users.FindAsync(id);
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == id);
+
             if (user == null) return NotFound(new { message = "Không tìm thấy người dùng." });
 
             return Ok(new UserResponse
