@@ -43,6 +43,17 @@ const calcActualDays = (fromdate?: string, todate?: string): number | null => {
   return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
 };
 
+const calcRemainingDays = (todate?: string): number => {
+  if (!todate) return 3;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(todate);
+  end.setHours(0, 0, 0, 0);
+  const diffTime = end.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  return diffDays > 0 ? diffDays : 1;
+};
+
 // ─────────────────────────────────────────────
 // QR Scanner Page
 // ─────────────────────────────────────────────
@@ -253,11 +264,7 @@ export default function QRScanner() {
       const defaultCourse = getDefaultCourse(crs);
       if (defaultCourse) {
         setRegCourseId(defaultCourse.id);
-        // Auto days from course duration
-        if (defaultCourse.fromdate && defaultCourse.todate) {
-          const diff = Math.abs(new Date(defaultCourse.todate).getTime() - new Date(defaultCourse.fromdate).getTime());
-          setRegDays(Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1);
-        }
+        setRegDays(calcRemainingDays(defaultCourse.todate));
       }
       if (ars.length > 0) setRegAreaId(ars[0].id);
     } catch {

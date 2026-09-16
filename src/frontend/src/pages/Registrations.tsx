@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { apiService, type Registration, type Course, type Member, type Bed, type Area, type User } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,6 +26,17 @@ const getTodayLocalDateString = () => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const calcRemainingDays = (todate?: string): number => {
+  if (!todate) return 3;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(todate);
+  end.setHours(0, 0, 0, 0);
+  const diffTime = end.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  return diffDays > 0 ? diffDays : 1;
 };
 
 export default function Registrations() {
@@ -171,11 +181,7 @@ export default function Registrations() {
       if (selected) {
         if (!isEditing) {
           setFromdate(getTodayLocalDateString());
-        }
-        if (selected.fromdate && selected.todate) {
-          const diffTime = Math.abs(new Date(selected.todate).getTime() - new Date(selected.fromdate).getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-          setDayAttend(diffDays);
+          setDayAttend(calcRemainingDays(selected.todate));
         }
       }
       // Re-select available bed for the selected course
@@ -202,13 +208,7 @@ export default function Registrations() {
     setFromdate(getTodayLocalDateString());
 
     const selectedCourse = courses.find(c => c.id === initialCourseId);
-    if (selectedCourse && selectedCourse.fromdate && selectedCourse.todate) {
-      const diffTime = Math.abs(new Date(selectedCourse.todate).getTime() - new Date(selectedCourse.fromdate).getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-      setDayAttend(diffDays);
-    } else {
-      setDayAttend(3);
-    }
+    setDayAttend(calcRemainingDays(selectedCourse?.todate));
     setTodate("");
 
     // Select first vacant bed if available from fresh beds data
@@ -540,15 +540,6 @@ export default function Registrations() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <Link to="/mobile">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1.5 font-semibold text-xs h-8 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20"
-            >
-              📱 Giao diện Mobile
-            </Button>
-          </Link>
 
           {/* View Mode Toggle */}
           <div className="flex items-center gap-1 border rounded-lg p-1 bg-muted/20">

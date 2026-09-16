@@ -12,7 +12,8 @@ import {
   ChevronRight,
   User as UserIcon,
   BookUser,
-  CalendarDays
+  CalendarDays,
+  Smartphone
 } from "lucide-react";
 import {
   Sidebar,
@@ -88,8 +89,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         return "Đăng ký Tham gia";
       case "/events":
         return "Quản lý Sự kiện";
+      case "/mobile":
       case "/qr":
-        return "Mobile Version";
+        return "Giao diện Mobile";
       default:
         return "Hệ thống";
     }
@@ -182,6 +184,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <span className="text-foreground font-semibold">{getBreadcrumbLabel()}</span>
             </div>
           </div>
+
+          <Link to="/mobile" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
+            <Smartphone className="h-4 w-4" />
+            <span className="hidden sm:inline">Giao diện Mobile</span>
+            <span className="sm:hidden">Mobile</span>
+          </Link>
         </header>
 
         <main className="flex-1 p-6 md:p-8 bg-background overflow-y-auto">

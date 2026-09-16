@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
 import jsQR from "jsqr";
 import { apiService, type Registration, type Course, type Member, type Bed, type Area } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { QrCode, ClipboardList, UserPlus, Flashlight, RefreshCw, CheckCircle2, BedDouble, Search, AlertCircle } from "lucide-react";
+import { QrCode, ClipboardList, UserPlus, Flashlight, RefreshCw, CheckCircle2, BedDouble, Search, AlertCircle, LayoutDashboard } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
 
 type MobileTab = "checkout_qr" | "list" | "register";
@@ -27,6 +28,19 @@ const isCourseActive = (c: Course): boolean => {
   const end = new Date(c.todate);
   end.setHours(0, 0, 0, 0);
   return today <= end;
+};
+
+const isTrue = (val: any): boolean => val === true || val === "true" || val === 1 || val === "1";
+
+const calcRemainingDays = (todate?: string): number => {
+  if (!todate) return 3;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(todate);
+  end.setHours(0, 0, 0, 0);
+  const diffTime = end.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  return diffDays > 0 ? diffDays : 1;
 };
 
 export default function MobileApp() {
@@ -105,11 +119,45 @@ export default function MobileApp() {
     stopCamera();
 
     const cleanCode = memberCode.trim().toUpperCase();
-    const foundMember = members.find(
-      (m) => m.code?.toUpperCase() === cleanCode || m.id.toString() === cleanCode
-    );
+
+    // Parse Code.UniqueId format if dot is present (e.g. "VD00536.536")
+    let parsedCode = "";
+    let parsedUniqueId = "";
+    if (cleanCode.includes(".")) {
+      const parts = cleanCode.split(".");
+      parsedCode = parts[0].trim();
+      parsedUniqueId = parts[1].trim();
+    }
+
+    const foundMember = members.find((m) => {
+      const mCode = m.code ? m.code.toUpperCase() : "";
+      const mUniqueId = m.uniqueId ? m.uniqueId.toString() : "";
+      const mId = m.id.toString();
+
+      // 1. If scanned code contains dot, e.g. "VD00536.536"
+      if (parsedCode && parsedUniqueId) {
+        if (mCode === parsedCode && (mUniqueId === parsedUniqueId || mId === parsedUniqueId)) {
+          return true;
+        }
+      }
+
+      // 2. Exact match on formatted string "CODE.UNIQUEID" or "CODE.ID"
+      if (`${mCode}.${mUniqueId}` === cleanCode || `${mCode}.${mId}` === cleanCode) {
+        return true;
+      }
+
+      // 3. Fallback match: code alone, uniqueId alone, or id alone, or phone
+      if (mCode === cleanCode) return true;
+      if (mUniqueId === cleanCode) return true;
+      if (mId === cleanCode) return true;
+      if (m.phone && m.phone === cleanCode) return true;
+
+      return false;
+    });
 
     if (!foundMember) {
+      setScannedMember(null);
+      setScannedReg(null);
       setScanState("error");
       setCheckoutError(`Không tìm thấy Phật tử có mã "${memberCode}".`);
       return;
@@ -117,21 +165,27 @@ export default function MobileApp() {
 
     setScannedMember(foundMember);
 
-    // Find active registration without todate
+    // Get active course IDs
+    const activeCourseIds = new Set(courses.filter(isCourseActive).map((c) => c.id));
+
+    // Find active registration without todate in active courses
     const activeReg = registrations.find(
-      (r) => r.memberId === foundMember.id && !r.todate
+      (r) => r.memberId === foundMember.id && activeCourseIds.has(r.courseId) && !r.todate
     );
 
     if (!activeReg) {
-      // Look for any registration
-      const anyReg = registrations.find((r) => r.memberId === foundMember.id);
-      if (anyReg) {
-        setScannedReg(anyReg);
+      // Look for any registration in active courses
+      const returnedActiveReg = registrations.find(
+        (r) => r.memberId === foundMember.id && activeCourseIds.has(r.courseId)
+      );
+      if (returnedActiveReg) {
+        setScannedReg(returnedActiveReg);
         setScanState("found");
         setCheckoutError("Phật tử này đã làm thủ tục cho về rồi.");
       } else {
+        setScannedReg(null);
         setScanState("error");
-        setCheckoutError(`Phật tử ${foundMember.name} chưa đăng ký khóa tu nào.`);
+        setCheckoutError(`Phật tử ${foundMember.name} chưa đăng ký tham gia khóa tu đang hoạt động nào.`);
       }
       return;
     }
@@ -141,7 +195,7 @@ export default function MobileApp() {
     setCheckoutError("");
     setCheckoutSuccess("");
     setScanState("found");
-  }, [members, registrations, stopCamera]);
+  }, [courses, members, registrations, stopCamera]);
 
   const tick = useCallback(() => {
     const video = videoRef.current;
@@ -354,6 +408,16 @@ export default function MobileApp() {
     }
   }, [activeTab, courses]);
 
+  // Update default regDayAttend whenever regCourseId changes
+  useEffect(() => {
+    if (regCourseId !== "") {
+      const selected = courses.find((c) => c.id === Number(regCourseId));
+      if (selected) {
+        setRegDayAttend(calcRemainingDays(selected.todate));
+      }
+    }
+  }, [regCourseId, courses]);
+
   // Selectable beds for chosen course
   const selectableBeds = beds.filter((b) => {
     if (!b.active || b.type !== "Chỗ ngủ") return false;
@@ -447,16 +511,28 @@ export default function MobileApp() {
           </div>
           <img src="/images/logo_KTPT.png" alt="Logo" className="w-25 group-data-[state=collapsed]:hidden" />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={loadData}
-          disabled={loading}
-          className="h-8 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold gap-1 rounded-full shadow-2xs"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-indigo-600" : ""}`} />
-          <span>Tải lại</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to="/">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold gap-1.5 rounded-full shadow-2xs"
+            >
+              <LayoutDashboard className="h-3.5 w-3.5 text-indigo-600" />
+              <span>Giao diện Admin</span>
+            </Button>
+          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loading}
+            className="h-8 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold gap-1 rounded-full shadow-2xs"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-indigo-600" : ""}`} />
+            <span>Tải lại</span>
+          </Button>
+        </div>
       </header>
 
       {/* Main Tab Contents */}
@@ -598,6 +674,20 @@ export default function MobileApp() {
                           <span className="text-slate-500 font-medium">Ngày bắt đầu tham gia:</span>
                           <span className="font-bold text-slate-800">
                             {scannedReg.fromdate ? new Date(scannedReg.fromdate).toLocaleDateString("vi-VN") : "N/A"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 font-medium">Có giữ giấy tờ tùy thân?</span>
+                          <span className={`font-bold px-2.5 py-0.5 rounded text-[11px] ${isTrue(scannedReg.recieveIdentity) ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                            {isTrue(scannedReg.recieveIdentity) ? "Có" : "Không"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 font-medium">Có giữ điện thoại?</span>
+                          <span className={`font-bold px-2.5 py-0.5 rounded text-[11px] ${isTrue(scannedReg.recievePhone) ? "bg-blue-100 text-blue-800 border border-blue-200" : "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                            {isTrue(scannedReg.recievePhone) ? "Có" : "Không"}
                           </span>
                         </div>
 
@@ -774,9 +864,27 @@ export default function MobileApp() {
                     </button>
                   </div>
 
-                  <div className="text-xs space-y-1 text-slate-700">
-                    <div>Phật tử: <span className="font-extrabold text-slate-900">{editCheckoutModalReg.memberName}</span></div>
-                    <div>Khóa tu: <span className="font-bold text-amber-700">{editCheckoutModalReg.courseName}</span></div>
+                  <div className="text-xs space-y-1.5 text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-medium">Phật tử:</span>
+                      <span className="font-extrabold text-slate-900">{editCheckoutModalReg.memberName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-medium">Khóa tu:</span>
+                      <span className="font-bold text-amber-700">{editCheckoutModalReg.courseName}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                      <span className="text-slate-500 font-medium">Có giữ giấy tờ tùy thân?</span>
+                      <span className={`font-bold px-2.5 py-0.5 rounded text-[11px] ${isTrue(editCheckoutModalReg.recieveIdentity) ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                        {isTrue(editCheckoutModalReg.recieveIdentity) ? "Có" : "Không"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-medium">Có giữ điện thoại?</span>
+                      <span className={`font-bold px-2.5 py-0.5 rounded text-[11px] ${isTrue(editCheckoutModalReg.recievePhone) ? "bg-blue-100 text-blue-800 border border-blue-200" : "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                        {isTrue(editCheckoutModalReg.recievePhone) ? "Có" : "Không"}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
