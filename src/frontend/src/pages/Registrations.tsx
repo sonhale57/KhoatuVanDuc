@@ -39,6 +39,9 @@ const calcRemainingDays = (todate?: string): number => {
   return diffDays > 0 ? diffDays : 1;
 };
 
+const isTrue = (val: any): boolean => val === true || val === "true" || val === 1 || val === "1";
+
+
 export default function Registrations() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -731,6 +734,20 @@ export default function Registrations() {
                               {r.memberOtherName && (
                                 <div className="text-xs text-primary font-semibold mt-0.5">PD: {r.memberOtherName}</div>
                               )}
+                              {(isTrue(r.recievePhone) || isTrue(r.recieveIdentity)) && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  {isTrue(r.recieveIdentity) && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20" title="Có giữ giấy tờ tùy thân">
+                                      Giữ giấy tờ
+                                    </span>
+                                  )}
+                                  {isTrue(r.recievePhone) && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-blue-500/10 text-blue-600 border border-blue-500/20" title="Có giữ điện thoại">
+                                      Giữ ĐT
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm font-medium">
                               {r.fromdate ? new Date(r.fromdate).toLocaleDateString("vi-VN") : ""} - {r.todate ? new Date(r.todate).toLocaleDateString("vi-VN") : "Chưa về"}
@@ -1267,15 +1284,31 @@ export default function Registrations() {
 
             <div className="space-y-4 py-4">
               {checkoutReg && (
-                <div className="rounded-lg border bg-muted/20 p-3.5 space-y-1.5 text-xs text-muted-foreground font-medium">
-                  <div><span className="font-bold text-foreground">Phật tử:</span> {checkoutReg.memberName}</div>
+                <div className="rounded-lg border bg-muted/20 p-3.5 space-y-2 text-xs text-muted-foreground font-medium">
+                  <div><span className="font-bold text-foreground">Phật tử:</span> {checkoutReg.memberName} {checkoutReg.memberOtherName ? `(PD: ${checkoutReg.memberOtherName})` : ""}</div>
+                  {checkoutReg.memberCode && <div><span className="font-bold text-foreground">Mã Phật tử:</span> {checkoutReg.memberCode}</div>}
                   <div><span className="font-bold text-foreground">Khóa tu:</span> {checkoutReg.courseName}</div>
                   <div><span className="font-bold text-foreground">Chỗ ngủ:</span> {checkoutReg.bedCode} ({checkoutReg.areaName})</div>
                   <div><span className="font-bold text-foreground">Ngày vào:</span> {checkoutReg.fromdate ? new Date(checkoutReg.fromdate).toLocaleDateString("vi-VN") : ""}</div>
                   <div><span className="font-bold text-foreground">Số ngày đăng ký ở:</span> {checkoutReg.dayAttend} ngày</div>
+
+                  <div className="border-t border-border/60 pt-2 mt-2 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground">Có giữ giấy tờ tùy thân?</span>
+                      <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${isTrue(checkoutReg.recieveIdentity) ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" : "bg-muted text-muted-foreground border border-border"}`}>
+                        {isTrue(checkoutReg.recieveIdentity) ? "Có giữ" : "Không"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground">Có giữ điện thoại?</span>
+                      <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${isTrue(checkoutReg.recievePhone) ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30" : "bg-muted text-muted-foreground border border-border"}`}>
+                        {isTrue(checkoutReg.recievePhone) ? "Có giữ" : "Không"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
-
               <div className="space-y-1">
                 <Label htmlFor="actual-end" className="font-semibold text-xs text-foreground">Ngày về thực tế <span className="text-destructive">*</span></Label>
                 <Input
@@ -1318,6 +1351,10 @@ export default function Registrations() {
                 <div><span className="font-bold text-foreground">Mã thành viên:</span> {historyReg.memberCode || "N/A"}</div>
                 <div><span className="font-bold text-foreground">Khóa tu:</span> {historyReg.courseName}</div>
                 <div><span className="font-bold text-foreground">Chỗ ngủ:</span> {historyReg.bedCode} ({historyReg.areaName || "N/A"})</div>
+                <div className="border-t border-border/60 pt-1.5 mt-1.5 flex items-center justify-between">
+                  <span>Có giữ giấy tờ: <span className="font-bold text-foreground">{isTrue(historyReg.recieveIdentity) ? "Có" : "Không"}</span></span>
+                  <span>Có giữ điện thoại: <span className="font-bold text-foreground">{isTrue(historyReg.recievePhone) ? "Có" : "Không"}</span></span>
+                </div>
               </div>
 
               <div className="space-y-3">
