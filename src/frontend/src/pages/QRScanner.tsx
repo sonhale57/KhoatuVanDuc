@@ -124,6 +124,23 @@ export default function QRScanner() {
     }
   }, []);
 
+  // ── Parse & validate QR format ───────────────
+  // Dùng useCallback để tránh stale closure trong processQRCode
+  const parseQR = useCallback((raw: string): { code: string; uniqueId: string } | null => {
+    // Sanitize: loại bỏ null bytes, ký tự điều khiển ẩn, BOM, whitespace thừa
+    const trimmed = raw
+      .replace(/\x00/g, "")           // null bytes
+      .replace(/[\x01-\x1F\x7F]/g, "") // control chars (trừ \n đã cover trong \x01-\x1F)
+      .replace(/\uFEFF/g, "")          // BOM
+      .trim();
+    const dotIndex = trimmed.indexOf(".");
+    if (dotIndex <= 0 || dotIndex === trimmed.length - 1) return null;
+    const code = trimmed.slice(0, dotIndex).trim();
+    const uniqueId = trimmed.slice(dotIndex + 1).trim();
+    if (!code || !uniqueId || isNaN(Number(uniqueId))) return null;
+    return { code, uniqueId };
+  }, []);
+
   // processQRCode được khai báo trước scanFrame để tránh hoisting issue
   const processQRCode = useCallback(async (raw: string) => {
     setScanError("");
@@ -132,16 +149,39 @@ export default function QRScanner() {
       const parsed = parseQR(raw);
       if (!parsed) {
         setScanState("error");
-        setScanError("Mã QR không đúng định dạng. Yêu cầu: MÃ.SỐ_ĐỊNH_DANH (VD: VD00536.536). Đã đọc: " + raw);
+        // Hiển thị raw đã được sanitize để debug dễ hơn
+        const displayRaw = raw.replace(/[\x00-\x1F\x7F\uFEFF]/g, "·").trim();
+        setScanError("Mã QR không đúng định dạng. Yêu cầu: MÃ.SỐ_ĐỊNH_DANH (VD: VD00536.536). Đã đọc: " + displayRaw);
         return;
       }
 
-      const allMembers = await apiService.members.getAll();
-      const member = allMembers.find(
-        m =>
-          m.code?.toLowerCase() === parsed.code.toLowerCase() &&
-          m.uniqueId?.toString() === parsed.uniqueId
-      );
+      // Tìm member theo keyword (code) qua API search để tránh bỏ sót
+      // khi danh sách Phật tử quá lớn và getAll bị giới hạn phía server
+      let member: import("@/services/api").Member | undefined;
+      try {
+        const paged = await apiService.members.getPaged(1, 50, parsed.code);
+        member = paged.items.find(
+          m =>
+            m.code?.toLowerCase() === parsed.code.toLowerCase() &&
+            m.uniqueId?.toString() === parsed.uniqueId
+        );
+      } catch {
+        // Fallback: nếu paged API lỗi, thử getAll
+      }
+
+      // Fallback: getAll nếu tìm paged không ra
+      if (!member) {
+        try {
+          const allMembers = await apiService.members.getAll();
+          member = allMembers.find(
+            m =>
+              m.code?.toLowerCase() === parsed.code.toLowerCase() &&
+              m.uniqueId?.toString() === parsed.uniqueId
+          );
+        } catch {
+          // ignore, sẽ báo không tìm thấy bên dưới
+        }
+      }
 
       if (!member) {
         setScanState("error");
@@ -150,14 +190,14 @@ export default function QRScanner() {
       }
 
       const allRegs = await apiService.registrations.getAll();
-      const memberRegs = allRegs.filter(r => r.memberId === member.id);
+      const memberRegs = allRegs.filter(r => r.memberId === member!.id);
       setScanResult({ member, registrations: memberRegs });
       setScanState("found");
     } catch (err: any) {
       setScanState("error");
       setScanError(err.message || "Lỗi khi xử lý mã QR.");
     }
-  }, []);
+  }, [parseQR]);
 
   // scanFrame dùng isScannedRef thay vì scanState để tránh stale closure
   const scanFrame = useCallback(() => {
@@ -182,7 +222,7 @@ export default function QRScanner() {
     // Dùng jsQR để decode — hoạt động trên mọi browser
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const code = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: "dontInvert",
+      inversionAttempts: "attemptBoth", // thử cả inverted QR (tăng tỷ lệ đọc thành công)
     });
 
     if (code && code.data) {
@@ -195,17 +235,6 @@ export default function QRScanner() {
 
     animRef.current = requestAnimationFrame(scanFrame);
   }, [stopCamera, processQRCode]); // eslint-disable-line
-
-  // ── Parse & validate QR format ───────────────
-  const parseQR = (raw: string): { code: string; uniqueId: string } | null => {
-    const trimmed = raw.trim();
-    const dotIndex = trimmed.indexOf(".");
-    if (dotIndex <= 0 || dotIndex === trimmed.length - 1) return null;
-    const code = trimmed.slice(0, dotIndex);
-    const uniqueId = trimmed.slice(dotIndex + 1);
-    if (!code || !uniqueId || isNaN(Number(uniqueId))) return null;
-    return { code, uniqueId };
-  };
 
 
   // ── Manual entry ─────────────────────────────
@@ -220,6 +249,8 @@ export default function QRScanner() {
   };
 
   const resetScan = useCallback(() => {
+    // 1. Clear ngay lập tức UI về trạng thái camera (idle)
+    //    trước khi chờ camera khởi động → tránh hiển thị kết quả cũ
     setScanState("idle");
     setScanResult(null);
     setScanError("");
@@ -228,7 +259,14 @@ export default function QRScanner() {
     setRegError("");
     setRegSuccess("");
     isScannedRef.current = false; // reset để cho phép quét lại
-    startCamera().then(() => { animRef.current = requestAnimationFrame(scanFrame); });
+
+    // 2. Khởi động lại camera sau khi state đã được clear
+    //    setTimeout(0) đảm bảo React flush state update trước khi camera start
+    setTimeout(() => {
+      startCamera().then(() => {
+        animRef.current = requestAnimationFrame(scanFrame);
+      });
+    }, 0);
   }, [startCamera, scanFrame]);
 
   // ── Registration modal data ──────────────────

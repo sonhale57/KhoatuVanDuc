@@ -698,8 +698,8 @@ export default function Registrations() {
                     <TableRow className="border-b-2 border-border/70 hover:bg-transparent">
                       <TableHead className="font-bold text-center text-xs uppercase tracking-wide text-muted-foreground/80">Mã Thành viên</TableHead>
                       <TableHead className="font-bold text-xs uppercase tracking-wide text-muted-foreground/80">Thành viên</TableHead>
-                      <TableHead className="font-bold text-xs uppercase tracking-wide text-muted-foreground/80">Ngày tham gia</TableHead>
-                      <TableHead className="font-bold text-xs uppercase tracking-wide text-muted-foreground/80">Số ngày Đăng ký</TableHead>
+                      <TableHead className="font-bold text-xs uppercase tracking-wide text-muted-foreground/80 text-center">Ngày tham gia</TableHead>
+                      <TableHead className="font-bold text-xs uppercase tracking-wide text-muted-foreground/80 text-center">Số ngày Đăng ký</TableHead>
                       <TableHead className="font-bold text-xs uppercase tracking-wide text-muted-foreground/80">Vị trí chỗ ngủ</TableHead>
                       <TableHead className="font-bold text-xs uppercase tracking-wide text-muted-foreground/80">Trạng thái</TableHead>
                       <TableHead className="font-bold text-right text-xs uppercase tracking-wide text-muted-foreground/80">Thao tác</TableHead>
@@ -749,13 +749,12 @@ export default function Registrations() {
                                 </div>
                               )}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm font-medium">
-                              {r.fromdate ? new Date(r.fromdate).toLocaleDateString("vi-VN") : ""} - {r.todate ? new Date(r.todate).toLocaleDateString("vi-VN") : "Chưa về"}
+                            <TableCell className="text-muted-foreground text-sm font-medium text-center">
+                              {r.fromdate ? new Date(r.fromdate).toLocaleDateString("vi-VN") : ""}  {r.todate ? " → " + new Date(r.todate).toLocaleDateString("vi-VN") : ""}
                             </TableCell>
-                            <TableCell className="font-medium text-xs">
-                              <span className="text-emerald-600 font-bold">{act !== null ? `${act} ngày` : "Chưa về"}</span>
-                              <span className="text-muted-foreground/60 mx-1.5">/</span>
-                              <span className="text-slate-600 font-semibold">{r.dayAttend} ngày đăng ký</span>
+                            <TableCell className="font-medium text-xs text-center">
+                              <span className="text-emerald-600 font-bold">{act !== null ? `${act} ngày / ` : ""}</span>
+                              <span className="text-slate-600 font-semibold">{r.dayAttend} ngày</span>
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-0.5">
